@@ -26,7 +26,8 @@ class TextDataset(BaseTextDataset):
 
     def __init__(self, path:PathOrStr, tokenizer:Tokenizer=None, vocab:Vocab=None, max_vocab:int=60000, chunksize:int=10000,
                  name:str='train', df=None,  min_freq:int=2, n_labels:int=1, txt_cols=None, label_cols=None,
-                 create_mtd:TextMtd=TextMtd.DF, classes:Collection[Any]=None, clear_cache:bool=False):
+                 create_mtd:TextMtd=TextMtd.DF, classes:Collection[Any]=None, clear_cache:bool=False,
+                 loss_func:callable=None):
         self.tokenizer = ifnone(tokenizer, Tokenizer())
         self.path,self.max_vocab,self.min_freq = Path(path)/'tmp',max_vocab,min_freq
         self.label_cols = ifnone(label_cols, list(range(n_labels)))
@@ -42,7 +43,10 @@ class TextDataset(BaseTextDataset):
         if os.path.isfile(self.path/f'{self.name}_lbl.npy'):
             self.labels = np.load(self.path/f'{self.name}_lbl.npy')
         else: self.labels = np.zeros((len(self.ids),), dtype=np.float32 if len(self.label_cols) > 1 else np.int64)
-        self.loss_func = F.cross_entropy if len(self.label_cols) <= 1 else F.binary_cross_entropy_with_logits
+        if loss_func is not None:
+            self.loss_func = loss_func
+        else:
+            self.loss_func = F.cross_entropy if len(self.label_cols) <= 1 else F.binary_cross_entropy_with_logits
         if classes: self.classes = classes
         elif os.path.isfile(self.path/'classes.txt'): self.classes = read_classes(self.path/'classes.txt')
         else: self.classes = np.unique(self.labels)
@@ -291,7 +295,7 @@ class TextDataBunch(DataBunch):
                       itos:str='itos.pkl', **kwargs) -> DataBunch:
         "Create a `TextDataBunch` from ids, labels and a dictionary."
         path=Path(path)
-        k_names = ['max_vocab', 'chunksize', 'min_freq', 'n_labels', 'id_suff', 'lbl_suff', 'clear_cache', 'classes']
+        k_names = ['max_vocab', 'chunksize', 'min_freq', 'n_labels', 'id_suff', 'lbl_suff', 'clear_cache', 'classes', 'loss_func']
         txt_kwargs, kwargs = extract_kwargs(k_names, kwargs)
         train_ds = TextDataset.from_ids(path, train, itos=itos, **txt_kwargs)
         datasets = [train_ds, TextDataset.from_ids(path, valid, itos=itos, **txt_kwargs)]
@@ -303,7 +307,7 @@ class TextDataBunch(DataBunch):
                          vocab:Vocab=None, **kwargs) -> DataBunch:
         "Create a `TextDataBunch` from tokens and labels."
         path=Path(path)
-        k_names = ['max_vocab', 'chunksize', 'min_freq', 'n_labels', 'tok_suff', 'lbl_suff', 'clear_cache', 'classes']
+        k_names = ['max_vocab', 'chunksize', 'min_freq', 'n_labels', 'tok_suff', 'lbl_suff', 'clear_cache', 'classes', 'loss_func']
         txt_kwargs, kwargs = extract_kwargs(k_names, kwargs)
         train_ds = TextDataset.from_tokens(path, train, vocab=vocab, **txt_kwargs)
         datasets = [train_ds, TextDataset.from_tokens(path, valid, vocab=train_ds.vocab, **txt_kwargs)]
@@ -316,7 +320,7 @@ class TextDataBunch(DataBunch):
         "Create a `TextDataBunch` from DataFrames."
         tokenizer = ifnone(tokenizer, Tokenizer())
         path=Path(path)
-        k_names = ['max_vocab', 'min_freq', 'n_labels', 'txt_cols', 'label_cols', 'clear_cache', 'classes']
+        k_names = ['max_vocab', 'min_freq', 'n_labels', 'txt_cols', 'label_cols', 'clear_cache', 'classes', 'loss_func']
         txt_kwargs, kwargs = extract_kwargs(k_names, kwargs)
         train_ds = TextDataset.from_df(path, train_df, tokenizer, 'train', vocab=vocab, **txt_kwargs)
         datasets = [train_ds, TextDataset.from_df(path, valid_df, tokenizer, 'valid', vocab=train_ds.vocab, **txt_kwargs)]
@@ -333,13 +337,14 @@ class TextDataBunch(DataBunch):
         test_df = None if test is None else pd.read_csv(os.path.join(path, test+'.csv'), header=header)
         return cls.from_df(path, train_df, valid_df, test_df, tokenizer, vocab, **kwargs)
 
+
     @classmethod
     def from_folder(cls, path:PathOrStr, tokenizer:Tokenizer=None, train:str='train', valid:str='valid', test:Optional[str]=None,
                          shuffle:bool=True, vocab:Vocab=None, **kwargs):
         "Create a `TextDataBunch` from text files in folders."
         tokenizer = ifnone(tokenizer, Tokenizer())
         path=Path(path)
-        k_names = ['max_vocab', 'chunksize', 'min_freq', 'n_labels', 'clear_cache', 'classes']
+        k_names = ['max_vocab', 'chunksize', 'min_freq', 'n_labels', 'clear_cache', 'classes', 'loss_func']
         txt_kwargs, kwargs = extract_kwargs(k_names, kwargs)
         train_ds = TextDataset.from_folder(path, tokenizer, train, shuffle=shuffle, vocab=vocab,
                                            classes=txt_kwargs.pop('classes', None), **txt_kwargs)

@@ -59,3 +59,29 @@ def test_from_df():
             if n_labels > 1: assert len(data.labels[0]) == n_labels
         finally:
             shutil.rmtree(path)
+
+def test_text_dataset_custom_loss_func():
+    # GIVEN
+    df = pd.DataFrame([{0: 0, "text": "fast ai is a cool project"}, {0: 0, 'text': "hello world"}])
+
+    def loss_func(x,y): return 0
+
+    # WHEN
+    text_ds = TextDataset.from_df('/tmp/', df, label_cols=[0], txt_cols=["text"], min_freq=0, tokenizer=Tokenizer(BaseTokenizer), loss_func=loss_func)
+
+    # THEN
+    assert text_ds.loss_func is loss_func
+
+
+def test_custom_loss_func():
+    # GIVEN
+    df = pd.DataFrame([{0: 0, "text": "fast ai is a cool project"}, {0: 0, 'text': "hello world"}])
+    valid_df = pd.DataFrame([{0: 0, "text": "fast ai is a nice project"}, {0: 0, 'text': "goodbye world"}])
+
+    def loss_func(x,y): return 0
+
+    # WHEN
+    text_data_bunch = TextLMDataBunch.from_df('/tmp/', df, valid_df=valid_df, label_cols=[0], txt_cols=["text"], min_freq=0, tokenizer=Tokenizer(BaseTokenizer), loss_func=loss_func, bs=1)
+
+    # THEN
+    assert text_data_bunch.loss_func is loss_func
